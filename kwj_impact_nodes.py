@@ -1,12 +1,15 @@
 import numpy as np
 import torch
 
-try:
-    import impact.core as core
-except Exception as exc:
-    raise ImportError(
-        "KWJ Impact Pack Addon requires ComfyUI-Impact-Pack to be installed as a separate custom node."
-    ) from exc
+
+def make_2d_mask(mask):
+    if len(mask.shape) == 4:
+        return mask.squeeze(0).squeeze(0)
+
+    if len(mask.shape) == 3:
+        return mask.squeeze(0)
+
+    return mask
 
 
 class SEGSFilterClosestMask:
@@ -80,7 +83,7 @@ class SEGSFilterClosestMask:
         if not segs or len(segs) < 2 or len(segs[1]) == 0:
             return ((0, 0), []), 0.0
 
-        mask_tensor = core.make_2d_mask(mask)
+        mask_tensor = make_2d_mask(mask)
         mask_np = mask_tensor.detach().cpu().numpy()
 
         result_shape = segs[0]
