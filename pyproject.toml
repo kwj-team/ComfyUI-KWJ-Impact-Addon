@@ -1,0 +1,14 @@
+[project]
+name = "comfyui-kwj-impact-addon"
+description = "Small addon nodes that depend on ComfyUI-Impact-Pack without replacing it."
+version = "0.1.0"
+license = { file = "LICENSE.txt" }
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/kwj/comfyui-kwj-impact-addon"
+
+[tool.comfy]
+PublisherId = "kwj"
+DisplayName = "KWJ Impact Pack Addon"
+Icon = ""

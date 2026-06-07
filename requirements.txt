@@ -1,0 +1,1 @@
+# Dependencies are provided by ComfyUI and the separately installed ComfyUI-Impact-Pack.
