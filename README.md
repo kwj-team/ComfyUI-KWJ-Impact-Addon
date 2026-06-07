@@ -9,6 +9,7 @@ Impact Pack normally, then install this folder as a separate custom node directo
 ## Nodes
 
 - `KWJ_SEGSFilterClosestMask` / `SEGS Filter (closest mask)`
+- `SEGSFilterClosestMask` / `SEGS Filter (closest mask, legacy)` when that node ID is not already registered
 
 ## Installation
 
@@ -26,8 +27,10 @@ The node appears under `KWJ/ImpactPack/Operation`.
 
 ## Notes
 
-- The internal node type is prefixed with `KWJ_` to avoid collisions with Impact Pack nodes.
-- If workflows were saved with the unprefixed `SEGSFilterClosestMask` type, replace that node with
-  `KWJ_SEGSFilterClosestMask` after installing this addon.
+- The primary node type is prefixed with `KWJ_` to avoid collisions with Impact Pack nodes.
+- Workflows saved with the unprefixed `SEGSFilterClosestMask` type can keep loading through the legacy alias
+  when no other installed node has already registered that ID.
+- If the official Impact Pack also registers `SEGSFilterClosestMask`, whichever extension ComfyUI loads for that
+  ID will be used. Use `KWJ_SEGSFilterClosestMask` in new workflows when you need this addon's implementation.
 - This addon imports `impact.core` from the separately installed Impact Pack. If Impact Pack is missing,
   ComfyUI will report that dependency at startup.

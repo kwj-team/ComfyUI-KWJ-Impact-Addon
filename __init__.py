@@ -46,13 +46,27 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 }
 
 
+def _node_id_is_available(node_id):
+    try:
+        import nodes
+
+        return node_id not in nodes.NODE_CLASS_MAPPINGS
+    except Exception:
+        return True
+
+
+if _node_id_is_available("SEGSFilterClosestMask"):
+    NODE_CLASS_MAPPINGS["SEGSFilterClosestMask"] = SEGSFilterClosestMask
+    NODE_DISPLAY_NAME_MAPPINGS["SEGSFilterClosestMask"] = "SEGS Filter (closest mask, legacy)"
+
+
 try:
     import cm_global
 
     cm_global.register_extension(
         "ComfyUI-KWJ-Impact-Addon",
         {
-            "version": "0.1.0",
+            "version": "0.1.1",
             "name": "KWJ Impact Pack Addon",
             "nodes": set(NODE_CLASS_MAPPINGS.keys()),
             "description": "Addon nodes that depend on a separately installed ComfyUI-Impact-Pack.",
