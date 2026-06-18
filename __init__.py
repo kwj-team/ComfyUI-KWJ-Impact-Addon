@@ -35,14 +35,17 @@ def _ensure_impact_pack_on_path():
 _ensure_impact_pack_on_path()
 
 from .kwj_impact_nodes import SEGSFilterClosestMask
+from .kwj_url_loader import KWJ_CachedImageLoadFromURL
 
 
 NODE_CLASS_MAPPINGS = {
     "KWJ_SEGSFilterClosestMask": SEGSFilterClosestMask,
+    "KWJ_CachedImageLoadFromURL": KWJ_CachedImageLoadFromURL,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "KWJ_SEGSFilterClosestMask": "SEGS Filter (closest mask)",
+    "KWJ_CachedImageLoadFromURL": "KWJ Cached Image Load From URL",
 }
 
 
