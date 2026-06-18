@@ -57,7 +57,19 @@ def _cache_dir() -> Path:
 def _cache_path(url: str) -> Path:
     digest = hashlib.md5(url.encode("utf-8")).hexdigest()
     prefix = _pod_cache_prefix()
-    return _cache_dir() / f"{prefix}-{digest}.webp"
+    return _cache_dir() / f"{prefix}-v2-{digest}.webp"
+
+
+def _image_has_alpha(image: Image.Image) -> bool:
+    if image.mode in ("RGBA", "LA"):
+        return True
+    return image.mode == "P" and "transparency" in image.info
+
+
+def _normalize_for_cache(image: Image.Image) -> Image.Image:
+    if _image_has_alpha(image):
+        return image.convert("RGBA")
+    return image.convert("RGB")
 
 
 def _request_headers(url: str) -> dict[str, str]:
@@ -113,7 +125,7 @@ def _try_read_cache(path: Path) -> bytes | None:
     return data
 
 
-def _fetch_and_cache(url: str, keep_alpha_channel: bool) -> bytes:
+def _fetch_and_cache(url: str) -> bytes:
     path = _cache_path(url)
     raw = _download_url(url)
     try:
@@ -123,11 +135,7 @@ def _fetch_and_cache(url: str, keep_alpha_channel: bool) -> bytes:
 
     image = Image.open(io.BytesIO(raw))
     image = ImageOps.exif_transpose(image)
-
-    if keep_alpha_channel and image.mode in ("RGBA", "LA"):
-        image = image.convert("RGBA")
-    else:
-        image = image.convert("RGB")
+    image = _normalize_for_cache(image)
 
     _save_webp(path, image)
     cached = path.read_bytes()
@@ -139,38 +147,60 @@ def _fetch_and_cache(url: str, keep_alpha_channel: bool) -> bytes:
     return cached
 
 
-def _load_bytes(url: str, keep_alpha_channel: bool) -> bytes:
+def _load_bytes(url: str) -> bytes:
     path = _cache_path(url)
     cached = _try_read_cache(path)
     if cached is not None:
         return cached
-    return _fetch_and_cache(url, keep_alpha_channel)
+    return _fetch_and_cache(url)
 
 
-def _tensor_from_bytes(data: bytes, keep_alpha_channel: bool) -> torch.Tensor:
+def _prepare_frame(frame: Image.Image, keep_alpha_channel: bool) -> tuple[Image.Image, Image.Image | None]:
+    """Match Off-Live load_images_from_url image + alpha mask extraction."""
+    frame = ImageOps.exif_transpose(frame)
+    has_alpha = "A" in frame.getbands()
+
+    if "RGB" not in frame.mode:
+        frame = frame.convert("RGBA") if has_alpha else frame.convert("RGB")
+
+    mask = None
+    if has_alpha:
+        mask = frame.getchannel("A")
+        alpha = frame.split()[-1]
+        image = Image.new("RGB", frame.size, (0, 0, 0))
+        image.paste(frame, mask=alpha)
+        image.putalpha(alpha)
+        if not keep_alpha_channel:
+            image = image.convert("RGB")
+    else:
+        image = frame
+
+    return image, mask
+
+
+def _tensors_from_bytes(data: bytes, keep_alpha_channel: bool) -> tuple[torch.Tensor, torch.Tensor]:
     image = Image.open(io.BytesIO(data))
     image = ImageOps.exif_transpose(image)
 
-    if keep_alpha_channel and image.mode in ("RGBA", "LA"):
-        image = image.convert("RGBA")
-    else:
-        image = image.convert("RGB")
-
     output_images = []
+    output_masks = []
     for frame in ImageSequence.Iterator(image):
-        frame = ImageOps.exif_transpose(frame)
-        if keep_alpha_channel and frame.mode in ("RGBA", "LA"):
-            frame = frame.convert("RGBA")
+        prepared_image, alpha_mask = _prepare_frame(frame, keep_alpha_channel)
+        image_tensor = torch.from_numpy(np.array(prepared_image).astype(np.float32) / 255.0)
+        if image_tensor.ndim == 2:
+            image_tensor = image_tensor.unsqueeze(0)
+        output_images.append(image_tensor.unsqueeze(0))
+
+        if alpha_mask is not None:
+            mask_np = np.array(alpha_mask).astype(np.float32) / 255.0
+            mask_tensor = 1.0 - torch.from_numpy(mask_np)
         else:
-            frame = frame.convert("RGB")
-        tensor = torch.from_numpy(np.array(frame).astype(np.float32) / 255.0)
-        if tensor.ndim == 2:
-            tensor = tensor.unsqueeze(0)
-        output_images.append(tensor.unsqueeze(0))
+            mask_tensor = torch.zeros((64, 64), dtype=torch.float32)
+        output_masks.append(mask_tensor.unsqueeze(0))
 
     if len(output_images) > 1:
-        return torch.cat(output_images, dim=0)
-    return output_images[0]
+        return torch.cat(output_images, dim=0), torch.cat(output_masks, dim=0)
+    return output_images[0], output_masks[0]
 
 
 class KWJ_CachedImageLoadFromURL:
@@ -184,12 +214,13 @@ class KWJ_CachedImageLoadFromURL:
             },
         }
 
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("IMAGE",)
+    RETURN_TYPES = ("IMAGE", "MASK")
+    RETURN_NAMES = ("IMAGE", "MASK")
     FUNCTION = "load"
     CATEGORY = "KWJ/Loaders"
     DESCRIPTION = (
         "Downloads an image from a URL into a per-pod flat cache (no metadata.json). "
+        "Second output is a mask from the image alpha channel. "
         "Safe for shared SimplePod volumes."
     )
 
@@ -200,5 +231,6 @@ class KWJ_CachedImageLoadFromURL:
         if output_mode:
             raise ValueError("KWJ_CachedImageLoadFromURL does not support output_mode=True")
 
-        data = _load_bytes(str(url), keep_alpha_channel)
-        return (_tensor_from_bytes(data, keep_alpha_channel),)
+        data = _load_bytes(str(url))
+        image, mask = _tensors_from_bytes(data, keep_alpha_channel)
+        return (image, mask)

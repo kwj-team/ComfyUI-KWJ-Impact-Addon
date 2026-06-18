@@ -62,6 +62,10 @@ if _node_id_is_available("SEGSFilterClosestMask"):
     NODE_CLASS_MAPPINGS["SEGSFilterClosestMask"] = SEGSFilterClosestMask
     NODE_DISPLAY_NAME_MAPPINGS["SEGSFilterClosestMask"] = "SEGS Filter (closest mask, legacy)"
 
+if _node_id_is_available("Cached Image Load From URL"):
+    NODE_CLASS_MAPPINGS["Cached Image Load From URL"] = KWJ_CachedImageLoadFromURL
+    NODE_DISPLAY_NAME_MAPPINGS["Cached Image Load From URL"] = "Cached Image Load From URL"
+
 
 try:
     import cm_global
