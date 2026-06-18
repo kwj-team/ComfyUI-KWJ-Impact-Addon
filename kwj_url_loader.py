@@ -11,13 +11,15 @@ import hashlib
 import io
 import os
 import re
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
 import folder_paths
 import numpy as np
 import torch
-from PIL import Image, ImageOps, ImageSequence
+from PIL import Image, ImageOps, ImageSequence, UnidentifiedImageError
 
 
 def _pod_cache_prefix() -> str:
@@ -67,11 +69,19 @@ def _request_headers(url: str) -> dict[str, str]:
 
 def _download_url(url: str) -> bytes:
     request = urllib.request.Request(url, headers=_request_headers(url))
-    with urllib.request.urlopen(request, timeout=120) as response:
-        data = response.read()
-    if not data:
-        raise ValueError(f"Empty response from URL: {url}")
-    return data
+    retry_delays = (1, 2, 3)
+
+    for attempt in range(len(retry_delays) + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                data = response.read()
+            if not data:
+                raise ValueError(f"Empty response from URL: {url}")
+            return data
+        except urllib.error.HTTPError as exc:
+            if exc.code != 502 or attempt >= len(retry_delays):
+                raise
+            time.sleep(retry_delays[attempt])
 
 
 def _save_webp(path: Path, image: Image.Image) -> None:
@@ -80,12 +90,37 @@ def _save_webp(path: Path, image: Image.Image) -> None:
     os.replace(tmp_path, path)
 
 
-def _load_bytes(url: str, keep_alpha_channel: bool) -> bytes:
-    path = _cache_path(url)
-    if path.is_file() and path.stat().st_size > 0:
-        return path.read_bytes()
+def _validate_image_bytes(data: bytes) -> None:
+    if not data:
+        raise ValueError("Empty image data")
+    with Image.open(io.BytesIO(data)) as image:
+        image.verify()
+    with Image.open(io.BytesIO(data)) as image:
+        image.load()
+        if image.width <= 0 or image.height <= 0:
+            raise ValueError("Invalid image dimensions")
 
+
+def _try_read_cache(path: Path) -> bytes | None:
+    if not path.is_file() or path.stat().st_size <= 0:
+        return None
+    data = path.read_bytes()
+    try:
+        _validate_image_bytes(data)
+    except (OSError, SyntaxError, ValueError, UnidentifiedImageError):
+        path.unlink(missing_ok=True)
+        return None
+    return data
+
+
+def _fetch_and_cache(url: str, keep_alpha_channel: bool) -> bytes:
+    path = _cache_path(url)
     raw = _download_url(url)
+    try:
+        _validate_image_bytes(raw)
+    except (OSError, SyntaxError, ValueError, UnidentifiedImageError) as exc:
+        raise ValueError(f"URL did not return a valid image: {url}") from exc
+
     image = Image.open(io.BytesIO(raw))
     image = ImageOps.exif_transpose(image)
 
@@ -95,7 +130,21 @@ def _load_bytes(url: str, keep_alpha_channel: bool) -> bytes:
         image = image.convert("RGB")
 
     _save_webp(path, image)
-    return path.read_bytes()
+    cached = path.read_bytes()
+    try:
+        _validate_image_bytes(cached)
+    except (OSError, SyntaxError, ValueError, UnidentifiedImageError):
+        path.unlink(missing_ok=True)
+        raise ValueError(f"Failed to cache a valid image from URL: {url}")
+    return cached
+
+
+def _load_bytes(url: str, keep_alpha_channel: bool) -> bytes:
+    path = _cache_path(url)
+    cached = _try_read_cache(path)
+    if cached is not None:
+        return cached
+    return _fetch_and_cache(url, keep_alpha_channel)
 
 
 def _tensor_from_bytes(data: bytes, keep_alpha_channel: bool) -> torch.Tensor:
