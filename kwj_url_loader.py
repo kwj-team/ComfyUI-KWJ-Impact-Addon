@@ -13,6 +13,7 @@ import os
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -52,6 +53,46 @@ def _cache_dir() -> Path:
     root = Path(folder_paths.get_input_directory()) / ".kwj_url_cache"
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def _cdn_base_url() -> str:
+    return os.environ.get("KWJ_CDN_BASE_URL", "https://childbook-b2.b-cdn.net").rstrip("/")
+
+
+def _normalize_request_url(url: str) -> str:
+    """Resolve CDN keys and percent-encode path segments (spaces, unicode, etc.)."""
+    raw = str(url).strip()
+    if not raw:
+        raise ValueError("Empty image URL")
+
+    if raw.startswith("/"):
+        raw = f"{_cdn_base_url()}{raw}"
+
+    if not raw.startswith("http"):
+        raise ValueError(f"Invalid image URL: {url}")
+
+    parts = urllib.parse.urlsplit(raw)
+    if not parts.scheme or not parts.netloc:
+        raise ValueError(f"Invalid image URL: {url}")
+
+    encoded_segments = []
+    for segment in parts.path.split("/"):
+        if not segment:
+            encoded_segments.append("")
+            continue
+        try:
+            decoded = urllib.parse.unquote(segment)
+        except ValueError:
+            decoded = segment
+        encoded_segments.append(urllib.parse.quote(decoded, safe=""))
+
+    encoded_path = "/".join(encoded_segments)
+    if parts.path.startswith("/"):
+        encoded_path = f"/{encoded_path.lstrip('/')}"
+
+    return urllib.parse.urlunsplit(
+        (parts.scheme, parts.netloc, encoded_path, parts.query, parts.fragment)
+    )
 
 
 def _cache_path(url: str) -> Path:
@@ -225,12 +266,13 @@ class KWJ_CachedImageLoadFromURL:
     )
 
     def load(self, url, keep_alpha_channel=False, output_mode=False):
-        if not url or not str(url).startswith("http"):
+        if not url:
             raise ValueError(f"Invalid image URL: {url}")
 
         if output_mode:
             raise ValueError("KWJ_CachedImageLoadFromURL does not support output_mode=True")
 
-        data = _load_bytes(str(url))
+        normalized_url = _normalize_request_url(url)
+        data = _load_bytes(normalized_url)
         image, mask = _tensors_from_bytes(data, keep_alpha_channel)
         return (image, mask)
