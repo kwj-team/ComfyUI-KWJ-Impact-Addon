@@ -59,8 +59,11 @@ def _cdn_base_url() -> str:
     return os.environ.get("KWJ_CDN_BASE_URL", "https://childbook-b2.b-cdn.net").rstrip("/")
 
 
+_PATH_SEGMENT_NEEDS_ENCODING = re.compile(r"[\s\x00-\x1f\x7f]")
+
+
 def _normalize_request_url(url: str) -> str:
-    """Resolve CDN keys and percent-encode path segments (spaces, unicode, etc.)."""
+    """Resolve CDN keys and percent-encode path segments only when urllib would reject them."""
     raw = str(url).strip()
     if not raw:
         raise ValueError("Empty image URL")
@@ -75,10 +78,18 @@ def _normalize_request_url(url: str) -> str:
     if not parts.scheme or not parts.netloc:
         raise ValueError(f"Invalid image URL: {url}")
 
+    if not _PATH_SEGMENT_NEEDS_ENCODING.search(parts.path) and not _PATH_SEGMENT_NEEDS_ENCODING.search(
+        raw
+    ):
+        return raw
+
     encoded_segments = []
     for segment in parts.path.split("/"):
         if not segment:
             encoded_segments.append("")
+            continue
+        if not _PATH_SEGMENT_NEEDS_ENCODING.search(segment):
+            encoded_segments.append(segment)
             continue
         try:
             decoded = urllib.parse.unquote(segment)
