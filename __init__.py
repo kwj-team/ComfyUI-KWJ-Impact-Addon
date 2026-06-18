@@ -73,7 +73,7 @@ try:
     cm_global.register_extension(
         "ComfyUI-KWJ-Impact-Addon",
         {
-            "version": "0.1.1",
+            "version": "0.1.2",
             "name": "KWJ Impact Pack Addon",
             "nodes": set(NODE_CLASS_MAPPINGS.keys()),
             "description": "Addon nodes that depend on a separately installed ComfyUI-Impact-Pack.",

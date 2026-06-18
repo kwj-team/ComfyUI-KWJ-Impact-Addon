@@ -80,13 +80,16 @@ class SEGSFilterClosestMask:
         return seg_mask_np
 
     def doit(self, segs, mask, match_method, threshold=0.0, return_all_scores=False):
-        if not segs or len(segs) < 2 or len(segs[1]) == 0:
+        if not segs or len(segs) < 2:
             return ((0, 0), []), 0.0
+
+        result_shape = segs[0]
+        if len(segs[1]) == 0:
+            return (result_shape, []), 0.0
 
         mask_tensor = make_2d_mask(mask)
         mask_np = mask_tensor.detach().cpu().numpy()
 
-        result_shape = segs[0]
         best_seg = None
         all_scores = []
 
