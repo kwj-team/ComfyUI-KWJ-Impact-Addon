@@ -1,8 +1,8 @@
 """
 KWJ URL image loader — flat file cache, no metadata.json index.
 
-Safe for SimplePods that share one volume: each pod uses a distinct filename
-prefix (env or hostname) and downloads are written atomically (*.part → replace).
+Safe for SimplePods that share one volume: all pods use the same cache key per
+URL and publish via unique temp files (*.part) followed by atomic replace.
 """
 
 from __future__ import annotations
@@ -15,38 +15,13 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from pathlib import Path
 
 import folder_paths
 import numpy as np
 import torch
 from PIL import Image, ImageOps, ImageSequence, UnidentifiedImageError
-
-
-def _pod_cache_prefix() -> str:
-    for key in ("KWJ_POD_ID", "SIMPLEPOD_POD_ID", "POD_ID"):
-        value = os.environ.get(key, "").strip()
-        if value:
-            return re.sub(r"[^a-zA-Z0-9_-]+", "-", value)
-
-    host = os.environ.get("HOSTNAME", "").strip()
-    if not host:
-        return "pod"
-
-    host = host.split(":")[0]
-    runpod_match = re.match(r"^([a-z0-9]+)-8188\.proxy\.runpod\.net$", host, re.I)
-    if runpod_match:
-        return runpod_match.group(1)
-
-    cf_match = re.match(r"^([a-z0-9-]+)\.trycloudflare\.com$", host, re.I)
-    if cf_match:
-        return cf_match.group(1)
-
-    generic_match = re.match(r"^([a-z0-9-]+)\.", host, re.I)
-    if generic_match:
-        return generic_match.group(1)
-
-    return re.sub(r"[^a-zA-Z0-9_-]+", "-", host)[:32] or "pod"
 
 
 def _cache_dir() -> Path:
@@ -108,8 +83,12 @@ def _normalize_request_url(url: str) -> str:
 
 def _cache_path(url: str) -> Path:
     digest = hashlib.md5(url.encode("utf-8")).hexdigest()
-    prefix = _pod_cache_prefix()
-    return _cache_dir() / f"{prefix}-v2-{digest}.webp"
+    return _cache_dir() / f"v2-{digest}.webp"
+
+
+def _unique_part_path(final_path: Path) -> Path:
+    token = uuid.uuid4().hex[:12]
+    return final_path.with_name(f"{final_path.stem}.{os.getpid()}.{token}.part")
 
 
 def _image_has_alpha(image: Image.Image) -> bool:
@@ -148,10 +127,13 @@ def _download_url(url: str) -> bytes:
             time.sleep(retry_delays[attempt])
 
 
-def _save_webp(path: Path, image: Image.Image) -> None:
-    tmp_path = path.with_suffix(path.suffix + ".part")
-    image.save(tmp_path, format="WEBP", quality=92, method=6)
-    os.replace(tmp_path, path)
+def _publish_webp(final_path: Path, image: Image.Image) -> None:
+    tmp_path = _unique_part_path(final_path)
+    try:
+        image.save(tmp_path, format="WEBP", quality=92, method=6)
+        os.replace(tmp_path, final_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 def _validate_image_bytes(data: bytes) -> None:
@@ -179,22 +161,29 @@ def _try_read_cache(path: Path) -> bytes | None:
 
 def _fetch_and_cache(url: str) -> bytes:
     path = _cache_path(url)
+
+    cached = _try_read_cache(path)
+    if cached is not None:
+        return cached
+
     raw = _download_url(url)
     try:
         _validate_image_bytes(raw)
     except (OSError, SyntaxError, ValueError, UnidentifiedImageError) as exc:
         raise ValueError(f"URL did not return a valid image: {url}") from exc
 
+    cached = _try_read_cache(path)
+    if cached is not None:
+        return cached
+
     image = Image.open(io.BytesIO(raw))
     image = ImageOps.exif_transpose(image)
     image = _normalize_for_cache(image)
 
-    _save_webp(path, image)
-    cached = path.read_bytes()
-    try:
-        _validate_image_bytes(cached)
-    except (OSError, SyntaxError, ValueError, UnidentifiedImageError):
-        path.unlink(missing_ok=True)
+    _publish_webp(path, image)
+
+    cached = _try_read_cache(path)
+    if cached is None:
         raise ValueError(f"Failed to cache a valid image from URL: {url}")
     return cached
 
@@ -271,9 +260,9 @@ class KWJ_CachedImageLoadFromURL:
     FUNCTION = "load"
     CATEGORY = "KWJ/Loaders"
     DESCRIPTION = (
-        "Downloads an image from a URL into a per-pod flat cache (no metadata.json). "
+        "Downloads an image from a URL into a shared flat cache (no metadata.json). "
         "Second output is a mask from the image alpha channel. "
-        "Safe for shared SimplePod volumes."
+        "Concurrent writes use unique temp files and atomic replace."
     )
 
     def load(self, url, keep_alpha_channel=False, output_mode=False):
