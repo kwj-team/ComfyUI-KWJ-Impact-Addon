@@ -8,6 +8,7 @@ URL and publish via unique temp files (*.part) followed by atomic replace.
 from __future__ import annotations
 
 import hashlib
+import http.client
 import io
 import os
 import re
@@ -110,21 +111,64 @@ def _request_headers(url: str) -> dict[str, str]:
     return headers
 
 
-def _download_url(url: str) -> bytes:
-    request = urllib.request.Request(url, headers=_request_headers(url))
-    retry_delays = (1, 2, 3)
+# Bunny DNS rotates between edges. Prague addresses often never finish a
+# handshake from SimplePod; Warsaw addresses for the same name do. Keep the
+# handshake on a short budget and resolve the name again on each retry.
+_CONNECT_TIMEOUT_SECONDS = 10
+_READ_TIMEOUT_SECONDS = 120
+_RETRY_DELAYS_SECONDS = (1, 2, 3)
 
-    for attempt in range(len(retry_delays) + 1):
+
+class _KWJHTTPConnection(http.client.HTTPConnection):
+    def connect(self):
+        super().connect()
+        self.sock.settimeout(_READ_TIMEOUT_SECONDS)
+
+
+class _KWJHTTPSConnection(http.client.HTTPSConnection):
+    def connect(self):
+        # super() performs the TCP connect and the TLS handshake under
+        # self.timeout. Raise the socket budget only after that succeeds.
+        super().connect()
+        self.sock.settimeout(_READ_TIMEOUT_SECONDS)
+
+
+class _KWJHTTPHandler(urllib.request.HTTPHandler):
+    def http_open(self, req):
+        return self.do_open(_KWJHTTPConnection, req)
+
+
+class _KWJHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(_KWJHTTPSConnection, req, context=self._context)
+
+
+_URL_OPENER = urllib.request.build_opener(_KWJHTTPHandler, _KWJHTTPSHandler)
+
+
+def _open_url(request: urllib.request.Request):
+    return _URL_OPENER.open(request, timeout=_CONNECT_TIMEOUT_SECONDS)
+
+
+def _download_url(url: str) -> bytes:
+    for attempt in range(len(_RETRY_DELAYS_SECONDS) + 1):
+        # New request each attempt, so connect() resolves the hostname again.
+        request = urllib.request.Request(url, headers=_request_headers(url))
         try:
-            with urllib.request.urlopen(request, timeout=120) as response:
+            with _open_url(request) as response:
                 data = response.read()
             if not data:
                 raise ValueError(f"Empty response from URL: {url}")
             return data
         except urllib.error.HTTPError as exc:
-            if exc.code != 502 or attempt >= len(retry_delays):
+            if exc.code != 502 or attempt >= len(_RETRY_DELAYS_SECONDS):
                 raise
-            time.sleep(retry_delays[attempt])
+            exc.close()
+            time.sleep(_RETRY_DELAYS_SECONDS[attempt])
+        except (urllib.error.URLError, ConnectionError):
+            if attempt >= len(_RETRY_DELAYS_SECONDS):
+                raise
+            time.sleep(_RETRY_DELAYS_SECONDS[attempt])
 
 
 def _publish_webp(final_path: Path, image: Image.Image) -> None:
