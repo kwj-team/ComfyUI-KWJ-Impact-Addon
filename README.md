@@ -10,6 +10,9 @@ Impact Pack normally, then install this folder as a separate custom node directo
 
 - `KWJ_SEGSFilterClosestMask` / `SEGS Filter (closest mask)`
 - `SEGSFilterClosestMask` / `SEGS Filter (closest mask, legacy)` when that node ID is not already registered
+- `KWJ_MaskedSkinToneMatch` / `KWJ Masked Skin Tone Match` (`KWJ/Color`): shifts skin inside a mask to the tone
+  the same region had in a reference image. Used after face swaps so the new face matches the illustrated body.
+  Needs only torch, not Impact Pack.
 
 ## Installation
 
