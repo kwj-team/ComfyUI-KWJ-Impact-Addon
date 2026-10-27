@@ -1,1 +1,2 @@
 # Dependencies are provided by ComfyUI and the separately installed ComfyUI-Impact-Pack.
+insightface==0.7.3
