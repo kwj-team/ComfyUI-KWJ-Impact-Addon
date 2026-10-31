@@ -1,9 +1,9 @@
 [project]
 name = "comfyui-kwj-impact-addon"
 description = "Small addon nodes that depend on ComfyUI-Impact-Pack without replacing it."
-version = "0.1.2"
+version = "0.2.0"
 license = { file = "LICENSE.txt" }
-dependencies = []
+dependencies = ["opencv-python"]
 
 [project.urls]
 Repository = "https://github.com/kwj/comfyui-kwj-impact-addon"

@@ -38,6 +38,15 @@ from .kwj_color_nodes import MaskedSkinToneMatch
 from .kwj_impact_nodes import SEGSFilterClosestMask
 from .kwj_url_loader import KWJ_CachedImageLoadFromURL
 
+try:
+    from .kwj_klein_edit_composite import KleinEditComposite
+    from .kwj_klein_edit_composite_fast import KleinEditCompositeFast
+except ImportError as error:
+    # ComfyUI core does not install OpenCV; the other nodes must still load without it.
+    print(f"[KWJ Impact Addon] Klein nodes disabled: {error}")
+    KleinEditComposite = None
+    KleinEditCompositeFast = None
+
 
 NODE_CLASS_MAPPINGS = {
     "KWJ_SEGSFilterClosestMask": SEGSFilterClosestMask,
@@ -50,6 +59,12 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "KWJ_CachedImageLoadFromURL": "KWJ Cached Image Load From URL",
     "KWJ_MaskedSkinToneMatch": "KWJ Masked Skin Tone Match",
 }
+
+if KleinEditComposite is not None:
+    NODE_CLASS_MAPPINGS["KWJ_KleinEditComposite"] = KleinEditComposite
+    NODE_CLASS_MAPPINGS["KWJ_KleinEditCompositeFast"] = KleinEditCompositeFast
+    NODE_DISPLAY_NAME_MAPPINGS["KWJ_KleinEditComposite"] = "Klein Edit Composite"
+    NODE_DISPLAY_NAME_MAPPINGS["KWJ_KleinEditCompositeFast"] = "Klein Edit Composite (Optimized)"
 
 
 def _node_id_is_available(node_id):
@@ -69,6 +84,14 @@ if _node_id_is_available("Cached Image Load From URL"):
     NODE_CLASS_MAPPINGS["Cached Image Load From URL"] = KWJ_CachedImageLoadFromURL
     NODE_DISPLAY_NAME_MAPPINGS["Cached Image Load From URL"] = "Cached Image Load From URL"
 
+if KleinEditComposite is not None and _node_id_is_available("KleinEditComposite"):
+    NODE_CLASS_MAPPINGS["KleinEditComposite"] = KleinEditComposite
+    NODE_DISPLAY_NAME_MAPPINGS["KleinEditComposite"] = "Klein Edit Composite (legacy)"
+
+if KleinEditCompositeFast is not None and _node_id_is_available("KleinEditCompositeFast"):
+    NODE_CLASS_MAPPINGS["KleinEditCompositeFast"] = KleinEditCompositeFast
+    NODE_DISPLAY_NAME_MAPPINGS["KleinEditCompositeFast"] = "Klein Edit Composite (Optimized, legacy)"
+
 
 try:
     import cm_global
@@ -76,7 +99,7 @@ try:
     cm_global.register_extension(
         "ComfyUI-KWJ-Impact-Addon",
         {
-            "version": "0.1.2",
+            "version": "0.2.0",
             "name": "KWJ Impact Pack Addon",
             "nodes": set(NODE_CLASS_MAPPINGS.keys()),
             "description": "Addon nodes that depend on a separately installed ComfyUI-Impact-Pack.",

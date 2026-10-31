@@ -1,2 +1,6 @@
-# Dependencies are provided by ComfyUI and the separately installed ComfyUI-Impact-Pack.
+# torch, numpy and Pillow come from ComfyUI; SEGS support comes from the separately
+# installed ComfyUI-Impact-Pack. The Klein nodes need OpenCV, which ComfyUI core does
+# not install itself (Impact Pack already pulls it in). Only main-module APIs are used,
+# so the contrib build is not required.
+opencv-python
 insightface==0.7.3
