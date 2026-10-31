@@ -36,6 +36,7 @@ _ensure_impact_pack_on_path()
 
 from .kwj_color_nodes import MaskedSkinToneMatch
 from .kwj_impact_nodes import SEGSFilterClosestMask
+from .kwj_mask_nodes import FastGrowMask, ScaleToMegapixels
 from .kwj_url_loader import KWJ_CachedImageLoadFromURL
 
 try:
@@ -52,12 +53,16 @@ NODE_CLASS_MAPPINGS = {
     "KWJ_SEGSFilterClosestMask": SEGSFilterClosestMask,
     "KWJ_CachedImageLoadFromURL": KWJ_CachedImageLoadFromURL,
     "KWJ_MaskedSkinToneMatch": MaskedSkinToneMatch,
+    "KWJ_FastGrowMask": FastGrowMask,
+    "KWJ_ScaleToMegapixels": ScaleToMegapixels,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "KWJ_SEGSFilterClosestMask": "SEGS Filter (closest mask)",
     "KWJ_CachedImageLoadFromURL": "KWJ Cached Image Load From URL",
     "KWJ_MaskedSkinToneMatch": "KWJ Masked Skin Tone Match",
+    "KWJ_FastGrowMask": "KWJ Fast Grow Mask",
+    "KWJ_ScaleToMegapixels": "KWJ Scale To Megapixels",
 }
 
 if KleinEditComposite is not None:
@@ -99,7 +104,7 @@ try:
     cm_global.register_extension(
         "ComfyUI-KWJ-Impact-Addon",
         {
-            "version": "0.2.0",
+            "version": "0.3.0",
             "name": "KWJ Impact Pack Addon",
             "nodes": set(NODE_CLASS_MAPPINGS.keys()),
             "description": "Addon nodes that depend on a separately installed ComfyUI-Impact-Pack.",

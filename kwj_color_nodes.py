@@ -132,10 +132,22 @@ class MaskedSkinToneMatch:
 
         outputs = []
         for index in range(image_target.shape[0]):
-            target = image_target[index, ..., :3].float()
-            item_mask = batch_item(masks, index)
+            full_mask = batch_item(masks, index)
+            rows = torch.nonzero(full_mask.amax(1)).squeeze(1)
+            if rows.numel() == 0:
+                outputs.append(image_target[index])
+                continue
+            columns = torch.nonzero(full_mask.amax(0)).squeeze(1)
+
+            # Pixels outside the mask never move and are never measured, so skip them: most
+            # of a page is background, and converting all of it dominates this node's time.
+            top, bottom = int(rows[0]), int(rows[-1]) + 1
+            left, right = int(columns[0]), int(columns[-1]) + 1
+            full_target = image_target[index, ..., :3].float()
+            target = full_target[top:bottom, left:right]
+            item_mask = full_mask[top:bottom, left:right]
             target_lab = srgb_to_oklab(target)
-            ref_lab = srgb_to_oklab(batch_item(ref, index))
+            ref_lab = srgb_to_oklab(batch_item(ref, index)[top:bottom, left:right])
             target_skin = skin_likelihood(target_lab)
 
             measured = item_mask >= self.MEASURE_MASK_THRESHOLD
@@ -154,7 +166,8 @@ class MaskedSkinToneMatch:
             # Pupils, lashes and nostrils stay put; the mask edge fades the shift out.
             weight = item_mask * ramp(target_lab[..., 0], 0.35, 0.6) * target_skin
             shifted = oklab_to_srgb(target_lab + shift * weight.unsqueeze(-1))
-            result = torch.where(weight.unsqueeze(-1) > 0, shifted, target)
+            result = full_target.clone()
+            result[top:bottom, left:right] = torch.where(weight.unsqueeze(-1) > 0, shifted, target)
             if image_target.shape[-1] > 3:
                 result = torch.cat((result, image_target[index, ..., 3:].float()), dim=-1)
             outputs.append(result.to(image_target.dtype))

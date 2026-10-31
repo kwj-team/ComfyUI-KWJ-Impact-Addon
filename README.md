@@ -18,6 +18,10 @@ Impact Pack normally, then install this folder as a separate custom node directo
 - `KWJ_KleinEditComposite` / `Klein Edit Composite` (`KWJ/Klein`) and
   `KWJ_KleinEditCompositeFast` / `Klein Edit Composite (Optimized)`, with `KleinEditComposite` and
   `KleinEditCompositeFast` legacy aliases when those IDs are free. See below. These need OpenCV, not Impact Pack.
+- `KWJ_FastGrowMask` / `KWJ Fast Grow Mask` (`KWJ/Mask`): pixel-identical to ComfyUI's `GrowMask`, computed with
+  OpenCV. About 7x faster at `expand` 64 on a 1536px mask. Needs OpenCV.
+- `KWJ_ScaleToMegapixels` / `KWJ Scale To Megapixels` (`KWJ/Image`): resizes to a pixel budget with both sides
+  snapped to multiples of 16. Needs only torch.
 
 ## Klein Edit Composite
 
@@ -71,7 +75,7 @@ builds ComfyUI installs.
 
 3. Restart ComfyUI.
 
-The nodes appear under `KWJ/ImpactPack/Operation`, `KWJ/Color`, `KWJ/Loaders` and `KWJ/Klein`.
+The nodes appear under `KWJ/ImpactPack/Operation`, `KWJ/Color`, `KWJ/Loaders`, `KWJ/Klein`, `KWJ/Mask` and `KWJ/Image`.
 
 ## Notes
 
